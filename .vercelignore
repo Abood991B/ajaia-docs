@@ -1,0 +1,6 @@
+.env*
+local.db
+*.db
+docs/
+tests/
+scripts/
