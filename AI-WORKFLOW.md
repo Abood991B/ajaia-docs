@@ -5,9 +5,8 @@
 - **OpenCode** — an AI coding agent running in the terminal, driving the
   implementation file by file (DeepSeek V4.1 Flash). This was the primary tool:
   roughly 80% of the lines written.
-- **Claude Code and GitHub Copilot CLI** were installed and available but not
-  used for this build. One primary agent with full repository context beat
-  switching between assistants.
+- **One agent, not a panel.** I used a single coding agent with full repository
+  context instead of splitting work across several assistants mid-build.
 - **Browser automation** (`agent-browser`) to drive the deployed app and take
   the screenshots in `docs/screenshots/`.
 - **Vercel CLI + API** for deployment and environment configuration.

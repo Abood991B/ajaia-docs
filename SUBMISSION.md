@@ -13,7 +13,7 @@
 | `AI-WORKFLOW.md` | Tools used, what AI accelerated, what was changed or rejected, how it was verified |
 | `SUBMISSION.md` | This file |
 | `WALKTHROUGH-VIDEO-URL.txt` | Unlisted walkthrough link |
-| `docs/screenshots/` | Login, dashboard, editor, share dialog, read-only view |
+| `docs/screenshots/` | Login, dashboard, editor, share dialog, read-only view, imported `.docx` |
 | `src/` | Application source |
 | `tests/` | Vitest suites |
 
