@@ -543,6 +543,10 @@ body {
   background: #fbfcfd;
 }
 
+.demo-note {
+  white-space: nowrap;
+}
+
 .demo-row strong {
   display: block;
   font-size: 12.5px;
@@ -558,7 +562,9 @@ body {
 
 @media (max-width: 860px) {
   .login-wrap {
-    grid-template-columns: 1fr;
+    /* minmax(0, …) matters: a bare 1fr keeps an automatic minimum, so one
+       nowrap row inside the form would widen the whole page. */
+    grid-template-columns: minmax(0, 1fr);
   }
   .login-aside {
     padding: 32px 24px;
@@ -566,6 +572,21 @@ body {
   }
   .login-aside::after {
     display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-panel {
+    padding: 28px 20px 40px;
+  }
+  .demo-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  .demo-note {
+    white-space: normal;
+    text-align: left;
   }
 }
 
@@ -1280,6 +1301,36 @@ body {
   }
   .history-preview {
     max-height: 36vh;
+  }
+
+  /* The editor header cannot fit a title plus six controls on one line, so it
+     becomes two: identity and title, then a scrollable control strip. */
+  .editor-topbar {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 8px 12px;
+  }
+  .editor-topbar .title-input {
+    order: 2;
+    flex: 1 1 55%;
+  }
+  .topbar-tools {
+    order: 3;
+    flex: 1 0 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .topbar-tools::-webkit-scrollbar {
+    display: none;
+  }
+  .topbar-tools > * {
+    flex: none;
+  }
+  .toolbar {
+    position: static;
   }
 }
 

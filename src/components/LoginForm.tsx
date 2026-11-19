@@ -146,7 +146,7 @@ export function LoginForm() {
                 {account.email}
               </span>
             </span>
-            <span style={{ whiteSpace: "nowrap" }}>{account.note}</span>
+            <span className="demo-note">{account.note}</span>
           </button>
         ))}
       </div>

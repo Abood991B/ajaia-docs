@@ -14,7 +14,7 @@
 | `SECURITY.md` | What is deliberately public, what is secret, how to rotate |
 | `SUBMISSION.md` | This file |
 | `WALKTHROUGH-VIDEO-URL.txt` | Unlisted walkthrough link |
-| `docs/screenshots/` | Login, dashboard, editor, comments rail, history list and preview, share dialog, read-only view, search, imported document |
+| `docs/screenshots/` | Login, dashboard, editor, comments rail, history list and preview, share dialog, read-only view, search, imported document, mobile layout |
 | `src/` | Application source |
 | `tests/` | Vitest suites |
 | `scripts/e2e-api.mjs` | 39-check API suite used to verify every role and endpoint |
