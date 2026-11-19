@@ -41,6 +41,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local scratch: recording scripts, packaging notes, one-off maintenance tools.
+# Never pushed and never included in the submission archive.
+/local/
+
 # local database
 *.db
 *.db-journal
