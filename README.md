@@ -45,14 +45,14 @@ drift between the two.
 ### Tests
 
 ```bash
-npm test             # 31 unit tests, Vitest
+npm test             # 39 unit tests, Vitest
 npm run typecheck    # tsc --noEmit
 npm run build        # production build
 ```
 
-The test suite targets the access-control module and the text pipeline — the
-two places where a bug is a security or data-integrity problem rather than a
-cosmetic one.
+The test suite targets the access-control module, the text pipeline and the
+import parsers — the places where a bug is a security or data-integrity problem
+rather than a cosmetic one.
 
 ### Environment
 

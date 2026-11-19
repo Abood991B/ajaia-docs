@@ -46,15 +46,19 @@ These are the moments where the agent's first answer was wrong or out of scope.
 | Return `403 Forbidden` when a user has no access | Changed to `404` | A 403 confirms the document exists. Not-found and no-access now return the same response. |
 | Name the demo-account helper `useDemo` | Renamed to `fillDemoAccount` | ESLint read it as a React hook. |
 | Show the raw document text as the dashboard excerpt | Added a query-layer fix | The first heading repeats the title, so every card showed the title twice. |
+| Parse `.docx` with `mammoth.convertToHtml({ arrayBuffer })` | Changed to `{ buffer: Buffer.from(...) }` | That call type-checks — the published types union the browser input in — but mammoth's **Node** build only accepts `{path}`, `{buffer}` or `{file}`. Markdown import worked, so the build stayed green and the failure only appeared when a real `.docx` hit the deployed app. |
 
 ## How correctness, UX and reliability were verified
 
 **Automated**
 
 - `npm run build` and `npx tsc --noEmit` clean.
-- `npm test` — 31 Vitest cases covering the permission matrix (owner, editor,
+- `npm test` — 39 Vitest cases. 31 cover the permission matrix (owner, editor,
   viewer, stranger, ownership-beats-share-row, `OWNER` rejected as a grantable
-  role), title normalisation, HTML stripping, sanitising and word counting.
+  role), title normalisation, HTML stripping, sanitising and word counting. The
+  other 8 run the real import parsers: markdown, plain text and a generated
+  `.docx` through mammoth, plus the extension, size, empty-file and
+  malformed-archive rejections.
 
 **Manual, against the deployed build — not localhost**
 
@@ -64,6 +68,11 @@ These are the moments where the agent's first answer was wrong or out of scope.
 - Appended a paragraph, waited for the save indicator, hard-reloaded, and
   confirmed the text was still there.
 - Imported a `.md` and a `.docx`; confirmed both produced editable documents.
+  **This is how the mammoth bug was found:** the `.md` returned 201 and the
+  `.docx` returned a generic “we could not read that file”. Reproducing it
+  against `next start` on the production build produced the real error
+  (`Could not find file in options`), which named the wrong argument in one
+  line. A test that builds a `.docx` in memory now covers it.
 - Shared the brief with Sam as *Can view* and confirmed the server rejected
   edits from that session (not just that the toolbar was hidden).
 - Called the API directly with a session cookie to confirm `401` when signed

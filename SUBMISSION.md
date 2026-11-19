@@ -44,7 +44,7 @@
 - Server-side authorisation on every read and write; strangers receive 404.
 - Persistence in libSQL (SQLite) locally and Turso in production.
 - Seeded accounts, login/logout, hashed passwords, signed session cookie.
-- 31 automated tests, clean typecheck, clean production build.
+- 39 automated tests, clean typecheck, clean production build.
 - Publicly reachable deployment with no paid dependency.
 
 ## Incomplete

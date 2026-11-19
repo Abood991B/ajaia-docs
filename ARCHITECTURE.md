@@ -119,6 +119,11 @@ because they are the kind of issue that eats an hour:
 2. Vercel Deployment Protection was on by default, which served an SSO wall to
    anyone without a Vercel account. It is disabled for this project so the
    reviewer link is genuinely public.
+3. `.docx` import passed `{ arrayBuffer }` to mammoth, which is the *browser*
+   input shape. Its Node build accepts `{ path | buffer | file }` and rejects
+   anything else, but the published types union both, so `tsc` was happy and
+   only a real upload at runtime failed. The fix is `{ buffer }`; the regression
+   test builds a `.docx` in memory and runs the real parser.
 
 ## What I would do with another 2–4 hours
 

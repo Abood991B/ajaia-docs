@@ -11,7 +11,8 @@ export async function POST(request: Request) {
   let form: FormData;
   try {
     form = await request.formData();
-  } catch {
+  } catch (error) {
+    console.error("Import body was not readable multipart", error);
     return jsonError(400, "VALIDATION_FAILED", "Send the file as multipart form data.");
   }
 

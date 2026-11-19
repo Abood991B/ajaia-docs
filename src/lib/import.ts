@@ -62,14 +62,23 @@ export async function importFile(file: File): Promise<ImportedDocument> {
   let html = "";
   try {
     if (extension === ".docx") {
-      const buffer = await file.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer: buffer });
+      // mammoth's Node build accepts {path} | {buffer} | {file}; `arrayBuffer`
+      // exists only in its browser build, so passing it here fails at runtime
+      // with "Could not find file in options".
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const result = await mammoth.convertToHtml({ buffer });
       html = result.value;
     } else {
       const raw = await file.text();
       html = extension === ".txt" ? textToHtml(raw) : await marked.parse(raw);
     }
-  } catch {
+  } catch (error) {
+    console.error("Could not parse import", {
+      name: file.name,
+      extension,
+      size: file.size,
+      error,
+    });
     throw new ImportError("We could not read that file.", "PARSE_FAILED");
   }
 
