@@ -1,46 +1,56 @@
+<!-- prettier-ignore -->
+<div align="center">
+
+<img src="src/app/icon.svg" alt="" height="64" />
+
 # Ajaia Docs
 
-A scoped, full-stack collaborative document editor: create a document, write it
-with real rich text, import a file into it, comment on a passage, share it with
-a teammate, and trust that it is still there after a refresh.
+A scoped collaborative document editor — create, write, comment, import, share, and trust that it survives a refresh.
 
-**Live app:** https://ajaia-docs-rho-one.vercel.app
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Tiptap 2](https://img.shields.io/badge/editor-Tiptap%202-1a1a1a?style=flat-square)](https://tiptap.dev)
+[![Tests](https://img.shields.io/badge/tests-60%20passing-2ea44f?style=flat-square)](#testing)
+[![Vercel](https://img.shields.io/badge/deploy-Vercel-000?style=flat-square&logo=vercel&logoColor=white)](https://ajaia-docs-rho-one.vercel.app)
 
----
+[Highlights](#highlights) • [Try it](#try-it-in-two-minutes) • [Quick start](#quick-start) • [Testing](#testing) • [How it works](#how-it-works)
 
-## Demo accounts
+</div>
 
-All three seeded accounts use the same password: `Ajaia2026!`
+![The editor, with a comment anchored to a paragraph](docs/screenshots/03-editor.png)
 
-| Account | Email | What to look at |
-| --- | --- | --- |
-| Abdulrahman Baidaq | `abdulrahman16baidaq@gmail.com` | Owns two documents. Can share and delete. |
-| Maya Chen | `maya@ajaia.test` | Has **edit** access to “Product brief — Ajaia Docs”, owns one document. |
-| Sam Ortiz | `sam@ajaia.test` | Has **view-only** access to the same brief. |
+Ajaia Docs is a full-stack document editor built around one path: create a document, write it with real rich text, comment on a passage, share it with a teammate, and have all of it still there after a refresh. It is deliberately small — a few features finished properly rather than many half-built ones.
 
-The login screen lists all three with one-click fill, so a reviewer does not
-have to type an email. You can also create a fresh account from `/register`.
+> [!TIP]
+> **Live app:** https://ajaia-docs-rho-one.vercel.app
+> **Password for all three demo accounts:** `Ajaia2026!`
+> `abdulrahman16baidaq@gmail.com` (owner) · `maya@ajaia.test` (can edit) · `sam@ajaia.test` (can view)
+>
+> The sign-in screen fills these in with one click, and you can create your own account from `/register`.
 
-**To see the whole model in about two minutes:**
+## Highlights
 
-1. Sign in as Abdulrahman → open “Product brief” → edit a line, wait for
-   *Saved*, reload. The formatting survives.
-2. Select a sentence and press **COMMENT** in the toolbar. The thread appears in
-   the right rail, anchored to those words. Reload: the anchor is still on the
-   same words.
-3. Press **History**. Every save is a snapshot. Open an older one and restore it;
-   the restore is itself a new version, so nothing is lost.
-4. Open the same document in a second tab and edit it. The first tab shows
-   *Updated by someone else* and adopts the new text.
-5. Sign out, sign in as Sam. The toolbar is gone, the editor is read-only, the
-   comments are visible but not actionable, and the dashboard lists the
-   document under “Shared with you”.
+- **Editing that behaves.** Bold, italic, underline, three heading levels, bulleted and numbered lists, quotes, inline code, undo/redo. Autosave is debounced at 700 ms with a visible save state, and an optimistic version guard turns a second tab into a clear conflict instead of silent data loss.
+- **Comments anchored to the text.** The anchor is a mark inside the document, not a character offset, so it moves with the text as people edit around it. Resolve removes the highlight; deleting the anchored text is detected and reported instead of pointing at the wrong words.
+- **Version history.** Every body save is a snapshot, the newest 30 are kept, and restoring writes a new version rather than erasing the list.
+- **Sharing with three roles.** Owner, editor, viewer — enforced in every route handler, not in the UI. Strangers receive `404` so the API never confirms a document exists.
+- **Import that produces editable content.** `.md`, `.markdown`, `.txt` and `.docx` become documents; **Insert file** appends to the one you are in. Nothing is stored as an attachment, so there is no blob storage to manage.
+- **Live sync and presence.** Open tabs converge through a four-second poll: an idle tab adopts a remote change, a busy one refuses and shows a banner. The header shows who else is present.
+- **Server-side search** across full document bodies, with a snippet around the match.
+- **No paid dependency.** Runs on a local SQLite file in development and Turso in production.
 
----
+## Try it in two minutes
 
-## Run it locally
+1. Open the [live app](https://ajaia-docs-rho-one.vercel.app) and press **Abdulrahman** on the sign-in screen.
+2. Open **Product brief — Ajaia Docs**, type a sentence, and watch *Unsaved changes* → *Saving…* → *Saved*. Refresh; it is still there.
+3. Select a sentence, press **COMMENT**, write a note, reload — the highlight is still on the same words.
+4. Press **History**, open a snapshot, then **Restore this version**.
+5. Press **Share**, add **Sam Ortiz** as *Can view*, sign in as Sam and open the same document: no toolbar, read-only editor, comments visible but not actionable.
+6. Open the document in a second tab, type, and watch the first tab announce *Updated by someone else*.
 
-Requires Node 20+ and npm. No database server, no Docker, no accounts.
+## Quick start
+
+**Prerequisites:** Node.js 20 or newer and npm. No database server, no Docker, no accounts.
 
 ```bash
 npm install
@@ -48,18 +58,31 @@ npm run db:setup     # creates ./local.db, applies the schema, seeds users and d
 npm run dev          # http://localhost:3000
 ```
 
-That is the whole setup. The app uses a libSQL file (`./local.db`) locally and
-Turso in production — the same engine and the same SQL, so there is no schema
-drift between the two.
+That is the whole setup. Development uses a libSQL file (`./local.db`); production uses Turso. Same engine and the same SQL, so there is no schema drift between them.
 
-### Tests
+### Environment variables
+
+Nothing is required locally. `.env.example` documents the three variables and commits no values.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `AUTH_SECRET` | Production | Signs the session JWT. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. |
+| `TURSO_DATABASE_URL` | Production | When set, the app talks to Turso instead of `./local.db`. |
+| `TURSO_AUTH_TOKEN` | Production | Token for that database. |
+
+> [!IMPORTANT]
+> In production the session layer throws if `AUTH_SECRET` is missing, so the first sign-in fails loudly rather than issuing a weak cookie. Locally it falls back to a development-only secret, so a fresh clone works with no configuration at all.
+
+## Testing
 
 ```bash
-npm test             # 60 unit tests, Vitest
+npm test             # 60 unit tests
 npm run typecheck    # tsc --noEmit
-npm run build        # production build
 npm run lint         # eslint
+npm run build        # production build
 ```
+
+The unit suite covers the permission matrix, the import parsers (including a generated `.docx` through the real mammoth build), comment-id validation, version retention, search matching and the HTML/text pipeline.
 
 Against a running server, the API surface is covered end to end:
 
@@ -67,144 +90,54 @@ Against a running server, the API surface is covered end to end:
 node scripts/e2e-api.mjs http://localhost:3000
 ```
 
-That script drives 39 checks across every endpoint and every role, including the
-ones that must fail: a viewer writing, a stranger reading, a stale save, an
-expired comment id, a duplicate registration. It creates and deletes its own
-scratch document. `node scripts/cleanup-qa.mjs` removes any probe accounts left
-behind if a run is interrupted.
+That script runs 39 checks across every endpoint and every role, including the cases that must fail — a viewer writing, a stranger reading, a stale save, an invalid comment id, a duplicate registration — then deletes the document it created. If a run is interrupted, `node scripts/cleanup-qa.mjs` removes the probe account it left behind.
 
-The unit suite targets the parts where a bug is a security or data-integrity
-problem rather than a cosmetic one: the permission matrix, the text pipeline,
-the import parsers, comment-id validation, version retention and search.
-
-### Environment
-
-Nothing is required locally. `.env.example` documents the two optional groups:
-
-```bash
-AUTH_SECRET=...              # signs the session cookie; required in production
-TURSO_DATABASE_URL=...       # when set, the app talks to Turso instead of ./local.db
-TURSO_AUTH_TOKEN=...
-```
-
----
-
-## What it does
-
-**Documents** — create, rename inline, edit, delete. Autosave with a visible
-save state, plus a conflict guard if the same document is open in two tabs.
-
-**Rich text** — bold, italic, underline, H1–H3, bulleted and numbered lists,
-blockquote, inline code, undo/redo, clear formatting. Built on Tiptap, so paste,
-undo history and keyboard shortcuts behave the way people expect.
-
-**Comments** — select a passage, press **COMMENT**, write. The thread lives in
-the right rail and is anchored by a mark inside the document, so it survives
-edits around it. Resolve removes the highlight and archives the thread.
-Authors can delete their own comments; the document owner can delete any.
-
-**Version history** — every body save writes a snapshot (the newest 30 are
-kept). Open one to preview it, restore it in one click. Restoring writes a new
-version rather than deleting history.
-
-**Live sync and presence** — open tabs poll a small sync endpoint. If the
-document changed and you are idle, the text updates in place with a notice; if
-you are mid-edit, you get a banner instead of a silent overwrite. The header
-shows who else has the document open.
-
-**Import** — `.md`, `.markdown`, `.txt` and `.docx` up to 2 MB. Markdown is
-converted to HTML, `.docx` goes through mammoth, plain text becomes paragraphs.
-Import creates a new document; **Insert file** in the editor appends to the one
-you are in. Neither stores an attachment — the result is editable content.
-
-**Sharing** — an owner grants *Can view* or *Can edit* to another account. The
-dashboard separates “Your documents” from “Shared with you”, and every request
-is checked on the server. Viewers get a read-only editor, not a disabled
-toolbar.
-
-**Search** — the dashboard search runs in SQL over titles and full document
-bodies, not just the card excerpt, and shows a snippet around the match.
-
-**Accounts** — three seeded accounts plus self-service registration. No email
-verification, no password reset (see `SECURITY.md`).
-
-**Persistence** — documents, comments, versions, presence and share grants live
-in SQLite (libSQL), so everything survives refreshes and redeploys.
-
----
-
-## Deliberately not built
-
-| Not built | Why |
-| --- | --- |
-| Live cursors / multi-caret editing | A CRDT needs a stateful WebSocket server. Vercel's serverless runtime cannot hold the socket, and a half-working Yjs demo would make the editing experience worse, not better. The poll-plus-version-guard in this build is honest about its latency. |
-| Comment replies and mentions | One thread per selection is enough to prove the anchoring model. Replies need a thread table and notification rules. |
-| Version diffing | Snapshots and restore are useful on their own; a semantic diff is a separate editor-sized problem. |
-| Binary attachments | Import covers “a file enters the product” without blob storage, signed URLs or orphan cleanup. |
-| Email invites, public links | The directory demonstrates the permission model without an email provider. A tokenised public link is a different access path and deserves its own table. |
-
-`SUBMISSION.md` lists the same cuts against what actually shipped.
-
----
-
-## Project layout
+## Project structure
 
 ```
 src/
-  app/
-    page.tsx                  dashboard (server component)
-    login/page.tsx            sign-in
-    register/page.tsx         sign-up
-    d/[id]/page.tsx           document route (server component)
-    api/                      route handlers: auth, documents, comments,
-                              versions, sync, import, share, users
-  components/
-    editor/DocumentEditor.tsx editor shell: autosave, sync, panels
-    editor/CommentMark.ts     the Tiptap mark that anchors a comment
-    editor/CommentsPanel.tsx  thread list and composer
-    editor/HistoryPanel.tsx   version list, preview, restore
-    editor/Toolbar.tsx        formatting controls
-    editor/ShareDialog.tsx    grant and revoke access
-    DashboardClient.tsx       create, import, server-backed search
-  server/
-    documents.ts              document + share data access, search
-    comments.ts               comment reads and mutations
-    versions.ts               snapshots and retention
-    presence.ts               viewer heartbeats
-    users.ts                  account directory
-  lib/
-    access.ts                 pure permission rules        ← unit tested
-    comments.ts               ids, previews, counts        ← unit tested
-    versions.ts               retention policy             ← unit tested
-    search.ts                 matching and snippets        ← unit tested
-    auth.ts                   session cookie, JWT
-    password.ts               scrypt hashing
-    import.ts                 file → HTML pipeline         ← unit tested
-    text.ts                   HTML/text helpers            ← unit tested
-    http.ts                   JSON envelope, zod body parsing
-    guard.ts                  request guards (auth + document access)
-  db/
-    schema.ts                 Drizzle schema
-    migrate.ts                idempotent DDL
-    seed.ts                   three users, three documents, three grants
-tests/                        Vitest suites
-scripts/                      setup, e2e, maintenance helpers
+  app/                     routes: dashboard, login, register, editor, API handlers
+  components/editor/       editor shell, comment mark and rail, history, share dialog
+  components/              dashboard, auth forms, shared chrome
+  server/                  data access: documents, comments, versions, presence
+  lib/                     access rules, auth, import, search, text, validation
+  db/                      Drizzle schema, migrations, seed
+tests/                     Vitest suites
+scripts/                   setup, font download, end-to-end API checks, test-data cleanup
+docs/screenshots/          UI captures used in this README
 ```
 
----
+## How it works
 
-## Notes and limits
+- **Next.js 15 App Router.** Server components read the database directly; route handlers form a small, explicit API. Every mutation is validated with zod.
+- **Tiptap 2 (ProseMirror)** for the editor, so undo, paste and schema behaviour are correct rather than approximated.
+- **Drizzle ORM on libSQL** — a file locally, Turso in production. Comments, versions and presence each get one table; retention is bounded.
+- **Server-side authorisation** composed from a pure module (`src/lib/access.ts`) that is also the unit-test target.
+- **HTML as the interchange format**, with the plain-text projection derived on the server so word counts and search cannot drift from the body.
 
-- Auth is deliberately lightweight: seeded accounts, scrypt-hashed passwords,
-  an HS256 JWT in an httpOnly cookie. There is no sign-up gate, password reset
-  or email verification.
-- The document body is stored as HTML plus a plain-text projection. HTML is the
-  interchange format; ProseMirror's schema is the validation layer when it is
-  loaded back into the editor. The text projection is derived server-side on
-  save, so the word count and search index cannot drift from the body.
-- Imported HTML and every save are scrubbed of `<script>`, `<style>`, inline
-  handlers and `javascript:` URLs.
-- Live sync polls every four seconds while the tab is visible. It is not
-  real-time in the CRDT sense; see `ARCHITECTURE.md` for why.
-- Production runs on Vercel with Turso. The free tiers are sufficient; nothing
-  in the stack requires a paid dependency.
+The architecture note covers the data model, the access matrix, the autosave and sync design, and the deployment gotchas in detail.
+
+## Deployment
+
+Vercel for the app, Turso for the database. Set `AUTH_SECRET`, `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the project environment, run `npm run db:setup` once against the remote database, and deploy. Both services have free tiers that are sufficient for this project.
+
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Scope decisions, data model, access matrix, autosave, sync, deployment |
+| [`AI-WORKFLOW.md`](AI-WORKFLOW.md) | Which AI tools were used, what was accelerated, what was rejected, how it was verified |
+| [`SECURITY.md`](SECURITY.md) | What is deliberately public, what is secret, how to rotate |
+| [`SUBMISSION.md`](SUBMISSION.md) | What shipped, what was cut, and what comes next |
+| [`docs/screenshots/`](docs/screenshots) | Login, dashboard, editor, comments, history, sharing, search, import, mobile |
+
+## Known limits
+
+- **No live cursors.** A CRDT needs a stateful WebSocket server, which this serverless deployment cannot host. Sync is a four-second poll with a version guard, so two people editing inside that window get a clear conflict rather than a merge.
+- **No comment replies, mentions or notifications.** One thread per selection.
+- **No diff between versions.** A snapshot is previewed whole.
+- **Deletion is permanent.** There is no trash.
+- **Commenting requires edit access.** There is no separate commenter role.
+- **Import appends or creates.** It cannot insert at the cursor.
+
+The demo password is public on purpose — it protects only the seeded demo data. See [`SECURITY.md`](SECURITY.md) if a secret scanner flags it.
