@@ -4,7 +4,15 @@ export function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+    // Only block boundaries become whitespace. Inline tags are removed
+    // outright, otherwise `<code>.md</code>,` turns into `.md ,` and the word
+    // count grows by one on every save.
+    .replace(
+      /<\/(p|div|h[1-6]|li|ul|ol|blockquote|pre|tr|td|th|section|article)>/gi,
+      " ",
+    )
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

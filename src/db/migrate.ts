@@ -27,6 +27,32 @@ const statements = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS share_doc_user_idx ON document_shares(document_id, user_id)`,
   `CREATE INDEX IF NOT EXISTS share_user_idx ON document_shares(user_id)`,
+  `CREATE TABLE IF NOT EXISTS document_comments (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    quoted_text TEXT NOT NULL DEFAULT '',
+    resolved_at INTEGER,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS comments_document_idx ON document_comments(document_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS document_versions (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    content_html TEXT NOT NULL,
+    content_text TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS versions_document_idx ON document_versions(document_id, created_at)`,
+  `CREATE TABLE IF NOT EXISTS document_presence (
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_seen_at INTEGER NOT NULL,
+    PRIMARY KEY (document_id, user_id)
+  )`,
 ];
 
 export async function migrate() {

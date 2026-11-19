@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { DocumentEditor } from "@/components/editor/DocumentEditor";
 import { toDocumentDto } from "@/lib/dto";
 import { getCurrentUser } from "@/lib/session";
+import { listComments } from "@/server/comments";
 import { getDocumentForUser, listShares } from "@/server/documents";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,10 @@ export default async function DocumentPage({
   const access = await getDocumentForUser(id, user.id);
   if (!access) notFound();
 
-  const shares = await listShares(id);
+  const [shares, comments] = await Promise.all([
+    access.role === "OWNER" ? listShares(id) : Promise.resolve([]),
+    listComments(id),
+  ]);
 
   return (
     <DocumentEditor
@@ -26,6 +30,7 @@ export default async function DocumentPage({
       role={access.role}
       ownerName={access.ownerName}
       shares={shares}
+      comments={comments}
       currentUser={user}
     />
   );

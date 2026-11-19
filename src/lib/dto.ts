@@ -1,4 +1,5 @@
 import type { DocumentRow } from "@/db/schema";
+import type { Role } from "@/lib/access";
 
 export type DocumentDto = {
   id: string;
@@ -28,4 +29,33 @@ export type ShareDto = {
   email: string;
   role: "VIEWER" | "EDITOR";
   createdAt: number;
+};
+
+export type CommentDto = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  quotedText: string;
+  resolvedAt: number | null;
+  createdAt: number;
+};
+
+export type VersionSummaryDto = {
+  id: string;
+  title: string;
+  wordCount: number;
+  authorName: string;
+  createdAt: number;
+};
+
+export type VersionDto = VersionSummaryDto & {
+  contentHtml: string;
+  contentText: string;
+};
+
+export type ViewerDto = {
+  id: string;
+  name: string;
+  role: Role;
 };

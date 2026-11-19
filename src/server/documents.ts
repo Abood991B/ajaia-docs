@@ -1,8 +1,11 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  documentComments,
+  documentPresence,
   documentShares,
+  documentVersions,
   documents,
   users,
   type DocumentRow,
@@ -16,6 +19,9 @@ import {
   type ShareRole,
 } from "@/lib/access";
 import { countWords, excerpt } from "@/lib/text";
+import { normalizeQuery, searchSnippet } from "@/lib/search";
+import { shouldSnapshot } from "@/lib/versions";
+import { snapshotVersion } from "@/server/versions";
 import type { ShareDto } from "@/lib/dto";
 
 export type DocumentSummary = {
@@ -99,6 +105,65 @@ export async function listDocumentsForUser(
 }
 
 /**
+ * Search runs in SQL over title and body rather than in the browser over a
+ * truncated excerpt, so a match deep inside a document is still findable.
+ * LIKE wildcards are stripped from the term: they are not meaningful in a
+ * search box and would turn `%` into a full-table match.
+ */
+export async function searchDocumentsForUser(
+  userId: string,
+  rawQuery: string,
+): Promise<{ owned: DocumentSummary[]; shared: DocumentSummary[]; query: string }> {
+  const term = normalizeQuery(rawQuery);
+  const needle = term.replace(/[%_]/g, " ").trim();
+  if (!needle) {
+    return { ...(await listDocumentsForUser(userId)), query: term };
+  }
+
+  const pattern = `%${needle}%`;
+  const where = or(
+    like(documents.title, pattern),
+    like(documents.contentText, pattern),
+  );
+
+  const ownedRows = await db
+    .select({ document: documents, ownerName: users.name })
+    .from(documents)
+    .innerJoin(users, eq(documents.ownerId, users.id))
+    .where(and(eq(documents.ownerId, userId), where))
+    .orderBy(desc(documents.updatedAt));
+
+  const sharedRows = await db
+    .select({
+      document: documents,
+      ownerName: users.name,
+      role: documentShares.role,
+    })
+    .from(documentShares)
+    .innerJoin(documents, eq(documentShares.documentId, documents.id))
+    .innerJoin(users, eq(documents.ownerId, users.id))
+    .where(and(eq(documentShares.userId, userId), where))
+    .orderBy(desc(documents.updatedAt));
+
+  const withSnippet = (
+    row: { document: DocumentRow; ownerName: string },
+    role: Role,
+  ): DocumentSummary => {
+    const summary = toSummary(row.document, role, row.ownerName);
+    const snippet =
+      searchSnippet(row.document.contentText, needle) ||
+      searchSnippet(row.document.title, needle);
+    return snippet ? { ...summary, excerpt: snippet } : summary;
+  };
+
+  return {
+    owned: ownedRows.map((row) => withSnippet(row, "OWNER")),
+    shared: sharedRows.map((row) => withSnippet(row, row.role)),
+    query: term,
+  };
+}
+
+/**
  * Single entry point for reading a document. Returns null both when the
  * document does not exist and when the caller has no access, so the API can
  * answer 404 in either case instead of leaking existence.
@@ -166,6 +231,7 @@ export type UpdateResult =
 export async function updateDocument(
   documentId: string,
   patch: UpdatePatch,
+  actorId: string | null = null,
 ): Promise<UpdateResult | null> {
   const existing = await db
     .select()
@@ -194,10 +260,20 @@ export async function updateDocument(
     .where(eq(documents.id, documentId))
     .returning();
 
+  // Every body save is a restore point. Title-only renames are not.
+  if (shouldSnapshot(patch)) {
+    await snapshotVersion(updated[0], actorId);
+  }
+
   return { status: "updated", document: updated[0] };
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
+  // SQLite does not enforce ON DELETE CASCADE unless the pragma is on, and
+  // libSQL leaves it off by default, so children are removed explicitly.
+  await db.delete(documentComments).where(eq(documentComments.documentId, documentId));
+  await db.delete(documentVersions).where(eq(documentVersions.documentId, documentId));
+  await db.delete(documentPresence).where(eq(documentPresence.documentId, documentId));
   await db.delete(documentShares).where(eq(documentShares.documentId, documentId));
   await db.delete(documents).where(eq(documents.id, documentId));
 }

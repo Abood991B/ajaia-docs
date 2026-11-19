@@ -3,6 +3,13 @@ import { db, sqlite } from "./client";
 import { documentShares, documents, users } from "./schema";
 import { hashPassword } from "@/lib/password";
 
+/**
+ * Public on purpose. These are demo accounts on a public deployment and the
+ * password is printed in the README so a reviewer can sign in without being
+ * sent a secret out of band. It protects nothing. See SECURITY.md.
+ *
+ * The login screen fills the same value; if you ever change one, change both.
+ */
 export const DEMO_PASSWORD = "Ajaia2026!";
 
 const now = Date.now();
@@ -45,13 +52,16 @@ const seedDocuments = [
       "<li>Autosave with a visible save state</li>",
       "<li>Import from <code>.md</code>, <code>.txt</code> and <code>.docx</code></li>",
       "<li>Owner / editor / viewer access</li>",
+      "<li>Comments anchored to the text they are about</li>",
+      "<li>Version history with one-click restore</li>",
+      "<li>Live sync and presence across open tabs</li>",
       "</ul>",
       "<h2>What is deliberately out</h2>",
-      "<p>Real-time co-editing, comments and version history. Each of those needs a data model that this timebox cannot do justice to.</p>",
+      "<p>Live cursors and multi-caret co-editing. A true CRDT needs a stateful WebSocket server, so open editors here converge through a short poll and an optimistic version guard instead. Everything else in the list above is built.</p>",
       "<p>Open this document as <em>Maya</em> to edit, or as <em>Sam</em> to see the read-only view.</p>",
     ].join(""),
     contentText:
-      "Product brief — Ajaia Docs Ajaia Docs is a focused collaborative editor: create a document, write it, share it with a teammate, and trust that it is still there tomorrow. What ships in this slice Rich text with headings, emphasis and lists Autosave with a visible save state Import from .md, .txt and .docx Owner / editor / viewer access What is deliberately out Real-time co-editing, comments and version history. Each of those needs a data model that this timebox cannot do justice to. Open this document as Maya to edit, or as Sam to see the read-only view.",
+      "Product brief — Ajaia Docs Ajaia Docs is a focused collaborative editor: create a document, write it, share it with a teammate, and trust that it is still there tomorrow. What ships in this slice Rich text with headings, emphasis and lists Autosave with a visible save state Import from .md, .txt and .docx Owner / editor / viewer access Comments anchored to the text they are about Version history with one-click restore Live sync and presence across open tabs What is deliberately out Live cursors and multi-caret co-editing. A true CRDT needs a stateful WebSocket server, so open editors here converge through a short poll and an optimistic version guard instead. Everything else in the list above is built. Open this document as Maya to edit, or as Sam to see the read-only view.",
     createdAt: new Date(now - 1000 * 60 * 60 * 26),
     updatedAt: new Date(now - 1000 * 60 * 42),
   },

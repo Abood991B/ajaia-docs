@@ -21,6 +21,18 @@ describe("stripHtml", () => {
   it("decodes the entities that survive a paste", () => {
     expect(stripHtml("<p>Tom &amp; Jerry&nbsp;here</p>")).toBe("Tom & Jerry here");
   });
+
+  it("does not split a word from its punctuation at an inline tag", () => {
+    expect(stripHtml("<p>Import <code>.md</code>, <code>.txt</code>.</p>")).toBe(
+      "Import .md, .txt.",
+    );
+  });
+
+  it("joins blocks and list items with a single space", () => {
+    expect(stripHtml("<p>one</p><p>two</p><ul><li>three</li></ul>")).toBe(
+      "one two three",
+    );
+  });
 });
 
 describe("scrubHtml", () => {

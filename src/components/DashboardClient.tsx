@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { roleLabel } from "@/lib/access";
+import { relativeTime } from "@/lib/format";
 
 export type DocumentCard = {
   id: string;
@@ -21,6 +22,32 @@ type Props = {
   shared: DocumentCard[];
   userName: string;
 };
+
+type ApiSummary = {
+  id: string;
+  title: string;
+  excerpt: string;
+  updatedAt: number;
+  wordCount: number;
+  role: "OWNER" | "EDITOR" | "VIEWER";
+  ownerName: string;
+  isOwned: boolean;
+};
+
+type Results = { owned: DocumentCard[]; shared: DocumentCard[] };
+
+function toCard(summary: ApiSummary): DocumentCard {
+  return {
+    id: summary.id,
+    title: summary.title,
+    excerpt: summary.excerpt,
+    updatedLabel: relativeTime(summary.updatedAt),
+    wordCount: summary.wordCount,
+    role: summary.role,
+    ownerName: summary.ownerName,
+    isOwned: summary.isOwned,
+  };
+}
 
 function Card({ document }: { document: DocumentCard }) {
   return (
@@ -46,6 +73,8 @@ export function DashboardClient({ owned, shared, userName }: Props) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Results | null>(null);
+  const [searching, setSearching] = useState(false);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +91,52 @@ export function DashboardClient({ owned, shared, userName }: Props) {
       shared: shared.filter(match),
     };
   }, [owned, shared, query]);
+
+  /**
+   * The cards only carry a 150-character excerpt, so a local filter cannot
+   * find a phrase in the middle of a document. Once the term is settled, ask
+   * the server, which matches against the whole body, and fall back to the
+   * local filter until the answer arrives.
+   */
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const response = await fetch(
+          `/api/documents?q=${encodeURIComponent(term)}`,
+          { signal: controller.signal, cache: "no-store" },
+        );
+        if (!response.ok) return;
+        const body = (await response.json()) as {
+          owned: ApiSummary[];
+          shared: ApiSummary[];
+        };
+        setResults({
+          owned: body.owned.map(toCard),
+          shared: body.shared.map(toCard),
+        });
+      } catch {
+        // Aborted by the next keystroke, or offline: keep the local filter.
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const shown = results ?? filtered;
 
   async function createDocument() {
     setCreating(true);
@@ -152,12 +227,14 @@ export function DashboardClient({ owned, shared, userName }: Props) {
         <input
           className="input"
           style={{ maxWidth: 300, height: 36 }}
-          placeholder="Filter by title or text"
+          placeholder="Search title or text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          aria-label="Filter documents"
+          aria-label="Search documents"
         />
-        <span className="mono">.md · .txt · .docx up to 2 MB</span>
+        <span className="mono">
+          {searching ? "searching all text…" : ".md · .txt · .docx up to 2 MB"}
+        </span>
       </div>
 
       {error ? (
@@ -169,12 +246,12 @@ export function DashboardClient({ owned, shared, userName }: Props) {
       <section>
         <div className="section-head">
           <h2>Your documents</h2>
-          <span className="count-chip">{filtered.owned.length}</span>
+          <span className="count-chip">{shown.owned.length}</span>
         </div>
 
-        {filtered.owned.length > 0 ? (
+        {shown.owned.length > 0 ? (
           <div className="doc-grid">
-            {filtered.owned.map((document) => (
+            {shown.owned.map((document) => (
               <Card key={document.id} document={document} />
             ))}
           </div>
@@ -193,12 +270,12 @@ export function DashboardClient({ owned, shared, userName }: Props) {
       <section>
         <div className="section-head">
           <h2>Shared with you</h2>
-          <span className="count-chip">{filtered.shared.length}</span>
+          <span className="count-chip">{shown.shared.length}</span>
         </div>
 
-        {filtered.shared.length > 0 ? (
+        {shown.shared.length > 0 ? (
           <div className="doc-grid">
-            {filtered.shared.map((document) => (
+            {shown.shared.map((document) => (
               <Card key={document.id} document={document} />
             ))}
           </div>

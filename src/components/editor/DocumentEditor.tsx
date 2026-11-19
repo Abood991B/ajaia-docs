@@ -2,26 +2,32 @@
 
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Logo } from "@/components/Logo";
 import type { Role } from "@/lib/access";
-import type { DocumentDto, ShareDto } from "@/lib/dto";
+import { countUnresolved, newCommentId } from "@/lib/comments";
+import type { CommentDto, DocumentDto, ShareDto, ViewerDto } from "@/lib/dto";
 import { relativeTime } from "@/lib/format";
 import { countWords, readingMinutes } from "@/lib/text";
+import { CommentMark } from "./CommentMark";
+import { CommentsPanel } from "./CommentsPanel";
+import { HistoryPanel } from "./HistoryPanel";
 import { ShareDialog } from "./ShareDialog";
 import { Toolbar } from "./Toolbar";
 
 type SaveStatus = "saved" | "dirty" | "saving" | "error" | "conflict";
+type Panel = "none" | "comments" | "history";
 
 type Props = {
   document: DocumentDto;
   role: Role;
   ownerName: string;
   shares: ShareDto[];
+  comments: CommentDto[];
   currentUser: { id: string; name: string; email: string };
 };
 
@@ -33,11 +39,36 @@ const STATUS_COLOR: Record<SaveStatus, string> = {
   conflict: "var(--danger)",
 };
 
+const POLL_MS = 4000;
+
+function anchoredCommentIds(editor: Editor): string[] {
+  const ids = new Set<string>();
+  editor.state.doc.descendants((node) => {
+    if (!node.isText) return;
+    for (const mark of node.marks) {
+      if (mark.type.name === "comment" && typeof mark.attrs.commentId === "string") {
+        ids.add(mark.attrs.commentId);
+      }
+    }
+  });
+  return [...ids];
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
 export function DocumentEditor({
   document,
   role,
   ownerName,
   shares,
+  comments: initialComments,
   currentUser,
 }: Props) {
   const router = useRouter();
@@ -53,15 +84,54 @@ export function DocumentEditor({
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [inserting, setInserting] = useState(false);
+  const [panel, setPanel] = useState<Panel>("none");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [comments, setComments] = useState<CommentDto[]>(initialComments);
+  const [anchoredIds, setAnchoredIds] = useState<string[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [draftQuote, setDraftQuote] = useState<string | null>(null);
+  const [draftRange, setDraftRange] = useState<{ from: number; to: number } | null>(
+    null,
+  );
+  const [draft, setDraft] = useState("");
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  const [viewers, setViewers] = useState<ViewerDto[]>([]);
+  const [remotePending, setRemotePending] = useState(false);
 
   const version = useRef(document.updatedAt);
   const pending = useRef<{ html: string; text: string } | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const flush = useCallback(async () => {
+  const statusRef = useRef<SaveStatus>("saved");
+  const draftOpenRef = useRef(false);
+  const panelRef = useRef<Panel>("none");
+  const commentsRef = useRef<CommentDto[]>(comments);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  useEffect(() => {
+    draftOpenRef.current = draftQuote !== null;
+    panelRef.current = panel;
+  }, [draftQuote, panel]);
+
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 4000);
+  }, []);
+
+  const flush = useCallback(async (): Promise<boolean> => {
     const payload = pending.current;
-    if (!payload) return;
+    if (!payload) return true;
     pending.current = null;
     setStatus("saving");
 
@@ -78,22 +148,26 @@ export function DocumentEditor({
 
       if (response.status === 409) {
         setStatus("conflict");
-        return;
+        setRemotePending(true);
+        return false;
       }
 
       if (!response.ok) {
         pending.current = payload;
         setStatus("error");
-        return;
+        return false;
       }
 
       const body = (await response.json()) as { document: DocumentDto };
       version.current = body.document.updatedAt;
       setSavedAt(body.document.updatedAt);
       setStatus("saved");
+      setRemotePending(false);
+      return true;
     } catch {
       pending.current = payload;
       setStatus("error");
+      return false;
     }
   }, [document.id]);
 
@@ -116,6 +190,7 @@ export function DocumentEditor({
       extensions: [
         StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
         Underline,
+        CommentMark,
         Placeholder.configure({
           placeholder: canEdit
             ? "Start writing. Formatting lives in the toolbar above."
@@ -126,14 +201,120 @@ export function DocumentEditor({
       editorProps: {
         attributes: { class: "ProseMirror", spellcheck: "true" },
       },
+      onCreate: ({ editor: instance }) => {
+        setAnchoredIds(anchoredCommentIds(instance));
+      },
       onUpdate: ({ editor: instance }) => {
         const text = instance.getText();
         setWords(countWords(text));
+        setAnchoredIds(anchoredCommentIds(instance));
         if (canEdit) scheduleSave(instance.getHTML(), text);
       },
     },
     [document.id],
   );
+
+  /** Save whatever is in the editor right now, bypassing the debounce. */
+  const saveNow = useCallback(async (): Promise<boolean> => {
+    if (!editor || !canEdit) return true;
+    pending.current = { html: editor.getHTML(), text: editor.getText() };
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    return flush();
+  }, [editor, canEdit, flush]);
+
+  const reloadFromServer = useCallback(
+    async (announce: boolean) => {
+      if (!editor) return;
+      const response = await fetch(`/api/documents/${document.id}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as {
+        document: DocumentDto;
+        comments?: CommentDto[];
+      };
+      if (body.document.updatedAt <= version.current) return;
+
+      editor.commands.setContent(body.document.contentHtml, false);
+      version.current = body.document.updatedAt;
+      setTitle(body.document.title);
+      setSavedAt(body.document.updatedAt);
+      setWords(countWords(body.document.contentText));
+      setStatus("saved");
+      setRemotePending(false);
+      setAnchoredIds(anchoredCommentIds(editor));
+      if (announce) showNotice("Updated by someone else");
+    },
+    [document.id, editor, showNotice],
+  );
+
+  // Presence + live sync. Polling, not a socket: the data the editor needs is
+  // tiny, and a serverless deployment cannot hold a WebSocket open.
+  useEffect(() => {
+    const documentId = document.id;
+    let cancelled = false;
+
+    async function tick() {
+      if (typeof window === "undefined") return;
+      if (window.document.visibilityState === "hidden") return;
+
+      try {
+        const response = await fetch(`/api/documents/${documentId}/sync`, {
+          cache: "no-store",
+        });
+        if (!response.ok || cancelled) return;
+        const body = (await response.json()) as {
+          updatedAt: number;
+          viewers: ViewerDto[];
+          unresolvedComments: number;
+        };
+        if (cancelled) return;
+
+        setViewers(body.viewers);
+
+        if (body.unresolvedComments !== countUnresolved(commentsRef.current)) {
+          const commentsResponse = await fetch(
+            `/api/documents/${documentId}/comments`,
+            { cache: "no-store" },
+          );
+          if (commentsResponse.ok) {
+            const commentsBody = await commentsResponse.json();
+            if (!cancelled) setComments(commentsBody.comments as CommentDto[]);
+          }
+        }
+
+        if (body.updatedAt > version.current) {
+          const idle =
+            statusRef.current === "saved" &&
+            !draftOpenRef.current &&
+            panelRef.current !== "history";
+          if (idle) {
+            await reloadFromServer(true);
+          } else {
+            setRemotePending(true);
+          }
+        }
+      } catch {
+        // Network hiccups are not worth surfacing: the next tick retries.
+      }
+    }
+
+    const interval = setInterval(() => void tick(), POLL_MS);
+    void tick();
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      void fetch(`/api/documents/${documentId}/sync`, {
+        method: "DELETE",
+        keepalive: true,
+      }).catch(() => undefined);
+    };
+  }, [document.id, reloadFromServer]);
+
+  useEffect(() => {
+    commentsRef.current = comments;
+  }, [comments]);
 
   useEffect(() => {
     setNow(Date.now());
@@ -170,6 +351,7 @@ export function DocumentEditor({
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       if (titleTimer.current) clearTimeout(titleTimer.current);
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
       const payload = pending.current;
       if (payload) {
         void fetch(`/api/documents/${document.id}`, {
@@ -217,6 +399,215 @@ export function DocumentEditor({
     router.refresh();
   }
 
+  async function onInsertFile(file: File | undefined) {
+    if (!file || !editor) return;
+    setInserting(true);
+    setNotice(null);
+
+    const saved = await saveNow();
+    if (!saved) {
+      setInserting(false);
+      showNotice("Save the current draft before inserting a file.");
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
+
+    const form = new FormData();
+    form.append("file", file);
+
+    const response = await fetch(`/api/documents/${document.id}/import`, {
+      method: "POST",
+      body: form,
+    });
+    const body = await response.json().catch(() => null);
+    setInserting(false);
+    if (fileInput.current) fileInput.current.value = "";
+
+    if (!response.ok) {
+      showNotice(body?.error?.message ?? "Could not insert that file.");
+      return;
+    }
+
+    const updated = body.document as DocumentDto;
+    editor.commands.setContent(updated.contentHtml, false);
+    version.current = updated.updatedAt;
+    setSavedAt(updated.updatedAt);
+    setWords(countWords(updated.contentText));
+    setStatus("saved");
+    setAnchoredIds(anchoredCommentIds(editor));
+    showNotice(`Inserted ${file.name}`);
+  }
+
+  function commentRanges(commentId: string): { from: number; to: number }[] {
+    if (!editor) return [];
+    const ranges: { from: number; to: number }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      for (const mark of node.marks) {
+        if (mark.type.name === "comment" && mark.attrs.commentId === commentId) {
+          ranges.push({ from: pos, to: pos + node.nodeSize });
+        }
+      }
+    });
+    return ranges;
+  }
+
+  /** Removes the anchor without moving the caret. */
+  function removeCommentMarks(commentId: string) {
+    if (!editor) return;
+    const { state, view } = editor;
+    const markType = state.schema.marks.comment;
+    const tr = state.tr;
+
+    state.doc.descendants((node, pos) => {
+      if (!node.isText) return;
+      for (const mark of node.marks) {
+        if (mark.type.name === "comment" && mark.attrs.commentId === commentId) {
+          tr.removeMark(pos, pos + node.nodeSize, markType);
+        }
+      }
+    });
+
+    if (tr.docChanged) view.dispatch(tr);
+  }
+
+  function startComment() {
+    if (!editor || !canEdit) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return;
+
+    const quote = editor.state.doc.textBetween(from, to, " ").trim().slice(0, 300);
+    setDraftQuote(quote);
+    setDraftRange({ from, to });
+    setDraft("");
+    setCommentError(null);
+    setPanel("comments");
+  }
+
+  async function submitComment() {
+    if (!editor || !draftRange || draftRange.from === draftRange.to) return;
+    const body = draft.trim();
+    if (!body) return;
+
+    const id = newCommentId();
+    const quotedText = editor.state.doc
+      .textBetween(draftRange.from, draftRange.to, " ")
+      .trim()
+      .slice(0, 400);
+
+    editor
+      .chain()
+      .setTextSelection(draftRange)
+      .setMark("comment", { commentId: id })
+      .run();
+
+    setCommentBusy(true);
+    setCommentError(null);
+
+    try {
+      const response = await fetch(`/api/documents/${document.id}/comments`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, body, quotedText }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        removeCommentMarks(id);
+        setCommentError(payload?.error?.message ?? "Could not add that comment.");
+        setCommentBusy(false);
+        return;
+      }
+
+      setComments(payload.comments as CommentDto[]);
+      setActiveCommentId(id);
+      setDraft("");
+      setDraftQuote(null);
+      setDraftRange(null);
+      setCommentBusy(false);
+      await saveNow();
+    } catch {
+      removeCommentMarks(id);
+      setCommentError("Could not reach the server. Try again.");
+      setCommentBusy(false);
+    }
+  }
+
+  async function resolveComment(commentId: string) {
+    setCommentBusy(true);
+    setCommentError(null);
+    try {
+      const response = await fetch(
+        `/api/documents/${document.id}/comments/${commentId}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ resolved: true }),
+        },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setCommentError(payload?.error?.message ?? "Could not resolve that comment.");
+        setCommentBusy(false);
+        return;
+      }
+      removeCommentMarks(commentId);
+      setComments(payload.comments as CommentDto[]);
+      setActiveCommentId(null);
+      setCommentBusy(false);
+      await saveNow();
+    } catch {
+      setCommentError("Could not reach the server. Try again.");
+      setCommentBusy(false);
+    }
+  }
+
+  async function deleteComment(commentId: string) {
+    setCommentBusy(true);
+    setCommentError(null);
+    try {
+      const response = await fetch(
+        `/api/documents/${document.id}/comments/${commentId}`,
+        { method: "DELETE" },
+      );
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setCommentError(payload?.error?.message ?? "Could not delete that comment.");
+        setCommentBusy(false);
+        return;
+      }
+      removeCommentMarks(commentId);
+      setComments(payload.comments as CommentDto[]);
+      setActiveCommentId(null);
+      setCommentBusy(false);
+      await saveNow();
+    } catch {
+      setCommentError("Could not reach the server. Try again.");
+      setCommentBusy(false);
+    }
+  }
+
+  function selectComment(commentId: string) {
+    setActiveCommentId(commentId);
+    setPanel("comments");
+    if (!editor) return;
+
+    const ranges = commentRanges(commentId);
+    if (ranges.length === 0) return;
+
+    const { from, to } = ranges[0];
+    editor.chain().setTextSelection({ from, to }).scrollIntoView().run();
+  }
+
+  function onDocumentClick(event: MouseEvent<HTMLDivElement>) {
+    const target = (event.target as HTMLElement).closest("[data-comment-id]");
+    if (!target) return;
+    const id = target.getAttribute("data-comment-id");
+    if (!id) return;
+    setActiveCommentId(id);
+    setPanel("comments");
+  }
+
   const savedLabel = useMemo(() => {
     if (status === "saving") return "Saving…";
     if (status === "dirty") return "Unsaved changes";
@@ -225,6 +616,8 @@ export function DocumentEditor({
     if (now === null) return "Saved";
     return `Saved ${relativeTime(savedAt, now)}`;
   }, [status, savedAt, now]);
+
+  const openComments = countUnresolved(comments);
 
   return (
     <div className="editor-shell">
@@ -256,9 +649,27 @@ export function DocumentEditor({
           spellCheck={false}
         />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+        <div className="topbar-tools">
+          {viewers.length > 0 ? (
+            <span
+              className="viewers"
+              title={viewers.map((viewer) => viewer.name).join(", ")}
+            >
+              {viewers.slice(0, 3).map((viewer) => (
+                <span key={viewer.id} className="viewer-dot" aria-hidden="true">
+                  {initials(viewer.name)}
+                </span>
+              ))}
+              <span className="mono viewers-label">
+                {viewers.length === 1
+                  ? `${viewers[0].name} is here`
+                  : `${viewers.length} others here`}
+              </span>
+            </span>
+          ) : null}
+
           <span
-            className="mono"
+            className="mono save-state"
             style={{ display: "inline-flex", alignItems: "center", gap: 6, textTransform: "none" }}
             aria-live="polite"
           >
@@ -274,6 +685,44 @@ export function DocumentEditor({
             />
             {savedLabel}
           </span>
+
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setPanel(panel === "comments" ? "none" : "comments")}
+            aria-pressed={panel === "comments"}
+          >
+            Comments{openComments > 0 ? ` · ${openComments}` : ""}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setPanel("history")}
+          >
+            History
+          </button>
+
+          {canEdit ? (
+            <>
+              <input
+                type="file"
+                ref={fileInput}
+                className="sr-only"
+                accept=".md,.markdown,.txt,.docx"
+                onChange={(event) => void onInsertFile(event.target.files?.[0])}
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => fileInput.current?.click()}
+                disabled={inserting}
+                title="Append an .md, .txt or .docx file to this document"
+              >
+                {inserting ? "Inserting…" : "Insert file"}
+              </button>
+            </>
+          ) : null}
 
           {!canEdit ? <span className="badge">View only</span> : null}
 
@@ -309,7 +758,7 @@ export function DocumentEditor({
         </div>
       </header>
 
-      {canEdit ? <Toolbar editor={editor} /> : null}
+      {canEdit ? <Toolbar editor={editor} onComment={startComment} /> : null}
 
       {status === "conflict" ? (
         <div className="alert alert-error" role="alert" style={{ margin: "12px 16px 0" }}>
@@ -323,6 +772,21 @@ export function DocumentEditor({
             onClick={() => window.location.reload()}
           >
             Reload
+          </button>
+        </div>
+      ) : null}
+
+      {status !== "conflict" && remotePending ? (
+        <div className="alert alert-info" role="status" style={{ margin: "12px 16px 0" }}>
+          <span style={{ flex: 1 }}>
+            Someone else saved a newer version while you were editing.
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => void reloadFromServer(true)}
+          >
+            Load it
           </button>
         </div>
       ) : null}
@@ -362,6 +826,11 @@ export function DocumentEditor({
             <span className="rail-label">read</span>
           </div>
 
+          <div className="rail-item">
+            <span className="rail-value">{openComments}</span>
+            <span className="rail-label">open notes</span>
+          </div>
+
           <div className="rail-track" aria-hidden="true">
             <div
               className="rail-progress"
@@ -381,11 +850,80 @@ export function DocumentEditor({
             </div>
           ) : null}
 
-          <div className="doc-body" data-readonly={canEdit ? "false" : "true"}>
+          <div
+            className="doc-body"
+            data-readonly={canEdit ? "false" : "true"}
+            onClick={onDocumentClick}
+          >
             <EditorContent editor={editor} />
           </div>
         </div>
       </div>
+
+      {panel === "comments" ? (
+        <CommentsPanel
+          comments={comments}
+          currentUserId={currentUser.id}
+          isOwner={isOwner}
+          canComment={canEdit}
+          activeId={activeCommentId}
+          anchoredIds={anchoredIds}
+          draftQuote={draftQuote}
+          draft={draft}
+          busy={commentBusy}
+          error={commentError}
+          onDraftChange={setDraft}
+          onSubmit={() => void submitComment()}
+          onCancelDraft={() => {
+            setDraftQuote(null);
+            setDraftRange(null);
+            setDraft("");
+            setCommentError(null);
+          }}
+          onSelect={selectComment}
+          onResolve={(id) => void resolveComment(id)}
+          onDelete={(id) => void deleteComment(id)}
+          onClose={() => setPanel("none")}
+        />
+      ) : null}
+
+      {panel === "history" ? (
+        <HistoryPanel
+          documentId={document.id}
+          expectedUpdatedAt={version.current}
+          canRestore={canEdit}
+          onClose={() => setPanel("none")}
+          onRestored={(updated) => {
+            if (!editor) return;
+
+            editor.commands.setContent(updated.contentHtml, false);
+
+            // An old snapshot can carry anchors for comments that no longer
+            // exist. Drop those marks so the restored document has no
+            // highlight pointing at a thread that was deleted.
+            const known = new Set(comments.map((comment) => comment.id));
+            for (const id of anchoredCommentIds(editor)) {
+              if (!known.has(id)) removeCommentMarks(id);
+            }
+
+            version.current = updated.updatedAt;
+            setSavedAt(updated.updatedAt);
+            setTitle(updated.title);
+            setWords(countWords(updated.contentText));
+            setAnchoredIds(anchoredCommentIds(editor));
+            setStatus("saved");
+            setPanel("none");
+            void saveNow();
+            showNotice("Version restored");
+          }}
+        />
+      ) : null}
+
+      {notice ? (
+        <div className="toast" role="status">
+          {notice}
+        </div>
+      ) : null}
 
       {shareOpen && isOwner ? (
         <ShareDialog

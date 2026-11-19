@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -155,6 +156,14 @@ export function LoginForm() {
         style={{ marginTop: 14, lineHeight: 1.6, textTransform: "none" }}
       >
         Password for all three: <strong>{DEMO_PASSWORD}</strong>
+      </p>
+
+      <p
+        className="mono"
+        style={{ marginTop: 10, lineHeight: 1.6, textTransform: "none" }}
+      >
+        No account? <Link href="/register">Create one</Link> — new accounts can
+        own documents and be shared with by email.
       </p>
     </div>
   );

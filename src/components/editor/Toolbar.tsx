@@ -32,7 +32,10 @@ function Icon({
 const BULLET_PATH = "M5.5 4.5h8M5.5 8h8M5.5 11.5h8M2.6 4.5h.01M2.6 8h.01M2.6 11.5h.01";
 const ORDERED_PATH = "M5.8 4.5h7.6M5.8 8h7.6M5.8 11.5h7.6M2.2 3.4h.9v2.2M2 7.2c.3-.5 1.3-.5 1.3.2 0 .5-1.3 1.1-1.3 1.4h1.4M2 10.6h1.3l-.8 1c.6 0 1 .3 1 .8 0 .6-.7.9-1.5.6";
 
-type Props = { editor: Editor | null };
+type Props = {
+  editor: Editor | null;
+  onComment?: () => void;
+};
 
 function ToolButton({
   active,
@@ -63,7 +66,7 @@ function ToolButton({
   );
 }
 
-export function Toolbar({ editor }: Props) {
+export function Toolbar({ editor, onComment }: Props) {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -169,6 +172,21 @@ export function Toolbar({ editor }: Props) {
       >
         <span className="mono" style={{ fontSize: 10, letterSpacing: "0.04em" }}>
           CLEAR
+        </span>
+      </ToolButton>
+
+      <span className="tool-sep" />
+
+      <ToolButton
+        label="Comment on selection"
+        disabled={!onComment || editor.state.selection.empty}
+        onClick={() => onComment?.()}
+      >
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <Icon path="M2.6 3.4h10.8v7H7.3L4.3 13v-2.6H2.6z" />
+          <span className="mono" style={{ fontSize: 10, letterSpacing: "0.04em" }}>
+            COMMENT
+          </span>
         </span>
       </ToolButton>
     </div>
