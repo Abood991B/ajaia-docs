@@ -33,7 +33,8 @@ just saves a reviewer from unzipping to read the summary.
 | `AI-WORKFLOW.md` | Tools used, what AI accelerated, what was changed or rejected, how it was verified |
 | `SECURITY.md` | What is deliberately public, what is secret, how to rotate |
 | `SUBMISSION.md` | The written submission, also pasted into the portal |
-| `WALKTHROUGH-VIDEO.md` | The recording script for the video |
+| `WALKTHROUGH-VIDEO.md` | The detailed shot list for the video |
+| `VIDEO-SCRIPT.md` | The read-aloud version used while recording |
 | `WALKTHROUGH-VIDEO-URL.txt` | Where the unlisted link goes |
 | `package.json`, `package-lock.json`, configs | Enough to `npm install && npm run db:setup && npm run dev` |
 
