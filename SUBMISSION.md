@@ -2,7 +2,14 @@
 
 **Candidate:** Abdulrahman Baidaq
 **Live app:** https://ajaia-docs-rho-one.vercel.app
-**Walkthrough video:** see `WALKTHROUGH-VIDEO-URL.txt`
+**Source:** https://github.com/Abood991B/ajaia-docs
+**Walkthrough video:** `<paste the unlisted Loom or YouTube URL here>`
+
+**Demo password for all three seeded accounts:** `Ajaia2026!`
+`abdulrahman16baidaq@gmail.com` · `maya@ajaia.test` · `sam@ajaia.test`
+
+*This file is written to be pasted directly into the portal's submission field
+— it is 110 lines, well under the 1,000-line limit.*
 
 ## What is in this folder
 
@@ -13,8 +20,7 @@
 | `AI-WORKFLOW.md` | Tools used, what AI accelerated, what was changed or rejected, how it was verified |
 | `SECURITY.md` | What is deliberately public, what is secret, how to rotate |
 | `SUBMISSION.md` | This file |
-| `WALKTHROUGH-VIDEO-URL.txt` | Unlisted walkthrough link |
-| `docs/screenshots/` | Login, dashboard, editor, comments rail, history list and preview, share dialog, read-only view, search, imported document, mobile layout |
+| `WALKTHROUGH-VIDEO-URL.txt` | Unlisted walkthrough link || `docs/screenshots/` | Login, dashboard, editor, comments rail, history list and preview, share dialog, read-only view, search, imported document, mobile layout |
 | `src/` | Application source |
 | `tests/` | Vitest suites |
 | `scripts/e2e-api.mjs` | 39-check API suite used to verify every role and endpoint |
