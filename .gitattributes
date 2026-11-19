@@ -1,0 +1,3 @@
+# Not part of the submission: this file explains how to package the folder.
+# Keep it in the repository, leave it out of the archive a reviewer receives.
+DRIVE-FOLDER.md export-ignore
